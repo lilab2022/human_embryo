@@ -2,7 +2,7 @@
 ###writer: Feng Ruoqing & Wang Hao & Li Muxi
 ###Date: 2022-10-4
 
-## Fig S3A
+## Fig S2A
 ## The function 'DoMultiBarHeatmap2' (shown as below) was modified from https://rdrr.io/github/RuiyuRayWang/scWidgets/src/R/DoMultiBarHeatmap.R
 
 DoMultiBarHeatmap2 <- function (object, 

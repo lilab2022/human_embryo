@@ -33,8 +33,7 @@ ggsave("~/[folder]/mac_2d.png",p1,width = 18,height =18,dpi = 300) # save the im
 
 #Fig2B 
 
-?a_reduced
-?mac.metatable
+## a_reduced normalized gene expression matrix
 
 marker.violin <- c("RAN","S100B","ACY3",
                    "AFP", "TTR","STMN1","AGR2","AXL",
@@ -82,7 +81,6 @@ for (i in unique(gene_exp2$subtype)){
   
 }
 
-?subtype_lfp
 
 lfp_major = read.csv("E:\\mac_new/subtype_lfp.csv",row.names = 1)
 colnames(lfp_major) = mac.sudomc$subtype

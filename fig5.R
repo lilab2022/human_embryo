@@ -240,246 +240,6 @@ p1 = ggplot(tissue_ratio)+
 ggsave("E:\\fig5/pram_prepram_ratio.pdf",p1,width = 5,height = 4,dpi = 300)
 
 
-
-
-
-
-meta_mf <- metatable %>% filter(time!="Adult") %>% filter(major=="macrophage")
-meta_mf <- meta_mf %>% filter(!embryo%in%c("embryo 54","embryo 12")) # contain 2/44 cell respectively
-
-### divide all time into 3 periods 119995 121152
-cs_stage = c("cs11","cs12","cs13","cs14","cs18","cs19","cs21","cs23")
-`week_9-13` = c("week9","week10","week11","week12","week13")
-after_week16 = c("week16","week19","week20","week23","week27")
-meta_mf$period <- meta_mf$time
-meta_mf$period[meta_mf$period%in%cs_stage] <- "CS stage"
-meta_mf$period[meta_mf$period%in%`week_9-13`] <- "9-13 PCW"
-meta_mf$period[meta_mf$period%in%after_week16] <- "After 16 PCW"
-table(meta_mf$period)
-
-### compute ratio of subtypes in different time periods
-ratio <- list()
-for(i in unique(meta_mf$embryo)){
-  df <- meta_mf %>% filter(embryo==i)
-  ratio[[i]] <- tapply(df$subtype,df$period,function(x){prop.table(table(x))}) %>% do.call(cbind,.) %>% as.data.frame()
-  ratio[[i]] <- ratio[[i]] %>% mutate(subtype=rownames(.),period=colnames(.),embryo=i)
-  colnames(ratio[[i]])[1] <- "ratio"
-}
-
-### zero not present in tables, complete
-ratio_complete <- function(ratio){
-  for(i in names(ratio)){
-    subtype_full <- unique(meta_mf$subtype)
-    subtype_complete <- setdiff(subtype_full,unique(ratio[[i]]$subtype))
-    if(!is.null(subtype_complete)){
-      df <- data.frame(subtype=subtype_complete)
-      df$ratio <- rep(0,nrow(df))
-      df$embryo <- rep(i,nrow(df))
-      df$period <- rep(unique(ratio[[i]]$period),nrow(df))
-      df <- df[,c("ratio","subtype","period","embryo")]
-      ratio[[i]] <- rbind(ratio[[i]],df)
-    }
-  }
-  
-  return(ratio)
-}
-ratio <- ratio_complete(ratio)
-
-ratio <- do.call(rbind,ratio)
-ratio$period <- factor(ratio$period,levels = c("CS stage","9-13 PCW","After 16 PCW"))
-
-color_grp <- c("#A6A8A9FF","#484A4BFF","#141414FF")
-names(color_grp) <- sort(unique(ratio$period))
-
-my_comp <- list(c("CS stage","9-13 PCW"),c("9-13 PCW","After 16 PCW"),c("CS stage","After 16 PCW"))
-
-
-#####
-mac1.metatable = mac12.metatable[mac12.metatable$time != "Adult",]
-mac1.metatable = mac1.metatable[,colnames(metatable)]
-mac1.metatable = mac1.metatable[mac1.metatable$tissue %in% c("Kidney","Lung","Adrenalgland",
-                                                             "Heart","Brain","Skin","Female gonad","Male gonad"),]
-mac1.metatable = mac1.metatable[mac1.metatable$subtype == "PraM",]
-skin = metatable[metatable$tissue == "Skin" & metatable$subtype %in% c("microglia","langerhans"),]
-skin$tissue = skin$subtype
-new.mac1 = rbind(mac1.metatable,skin)
-brain = metatable[metatable$tissue == "Brain" & metatable$subtype == "microglia",]
-brain$tissue = "Brain_microglia"
-new.mac1 = rbind(new.mac1,brain)
-gonad_male = metatable[metatable$tissue == "Male gonad" & metatable$subtype %in% c("gonad_macrophage","osteoclast"),]
-gonad_male$tissue = gonad_male$subtype
-new.mac1 = rbind(new.mac1,gonad_male)
-Adrenalgland = metatable[metatable$tissue == "Adrenalgland" & metatable$subtype == "Adrenalgland_macrophage",]
-Adrenalgland$tissue = Adrenalgland$subtype
-new.mac1 = rbind(new.mac1,Adrenalgland)
-
-new.mac1 = new.mac1[new.mac1$time %in% after9,]
-
-new.mac1.seurat = a[discard_gene2(rownames(a)),new.mac1$Well_ID]
-new.mac1.seurat = CreateSeuratObject(counts = new.mac1.seurat)
-new.mac1.seurat <- NormalizeData(new.mac1.seurat, normalization.method =  "LogNormalize")
-new.mac1.seurat <- FindVariableFeatures(new.mac1.seurat,selection.method = "vst", nfeatures = 2000)
-new.mac1.seurat <- ScaleData(new.mac1.seurat)
-new.mac1.seurat <- RunPCA(object = new.mac1.seurat, pc.genes = VariableFeatures(mac1.seurat))
-new.mac1.seurat <- FindNeighbors(new.mac1.seurat, dims = 1:30)
-new.mac1.seurat <- FindClusters(new.mac1.seurat, resolution = 0.5)
-
-tmp = new.mac1$tissue
-names(tmp) = new.mac1$Well_ID
-Idents(new.mac1.seurat) = tmp
-DimPlot(new.mac1.seurat)
-
-mac1.pca = as.data.frame(new.mac1.seurat@reductions$pca@cell.embeddings)
-mac1.pca = mac1.pca[,c(1,2)]
-mac1.center = colMeans(mac1.pca[new.mac1$Well_ID[new.mac1$subtype == "PraM"],])
-
-dis.embryo.subtype = matrix(NA,nrow = length(unique(new.mac1$embryo)),ncol = length(unique(new.mac1$tissue)))
-colnames(dis.embryo.subtype) = unique(new.mac1$tissue)
-rownames(dis.embryo.subtype) = unique(new.mac1$embryo)
-for (i in unique(unique(new.mac1$embryo))){
-  for (j in unique(new.mac1$tissue[new.mac1$embryo == i])){
-    if(nrow(new.mac1[new.mac1$embryo == i & new.mac1$tissue == j,])>10){
-      tmp = mac1.pca[new.mac1$Well_ID[new.mac1$embryo == i & new.mac1$tissue == j],]
-      tmp["center",] = mac1.center
-      tmp.dist = as.matrix(dist(tmp,method = "euclidean"))
-      tmp = as.data.frame(tmp.dist["center",])
-      colnames(tmp) = "value"
-      tmp = tmp[setdiff(rownames(tmp),"center"),]
-      q1 = quantile(tmp,0.001)
-      q99 = quantile(tmp,0.999)
-      tmp = tmp[tmp>q1]
-      tmp = tmp[tmp<q99]
-      dis.embryo.subtype[i,j] = mean(tmp)
-    }
-  }
-}
-dis.embryo.subtype = as.data.frame(dis.embryo.subtype)
-dis.embryo.subtype$embryo = rownames(dis.embryo.subtype)
-dis.embryo.subtype2 = reshape2::melt(dis.embryo.subtype)
-
-dis.embryo.subtype2$subtype = "PraM"
-dis.embryo.subtype2$subtype[dis.embryo.subtype2$variable %in% c("Adrenalgland_macrophage")] = "Adrenalgland_macrophage"
-dis.embryo.subtype2$subtype[dis.embryo.subtype2$variable %in% c("gonad_macrophage")] = "gonad_macrophage"
-dis.embryo.subtype2$subtype[dis.embryo.subtype2$variable %in% c("osteoclast")] = "osteoclast"
-dis.embryo.subtype2$subtype[dis.embryo.subtype2$variable %in% c("langerhans")] = "langerhans"
-dis.embryo.subtype2$subtype[dis.embryo.subtype2$variable %in% c("microglia","Brain_microglia")] = "microglia"
-dis.embryo.subtype2$variable = factor(dis.embryo.subtype2$variable,levels = c("Lung","Kidney","Heart","Adrenalgland",
-                                                                              "Female gonad","Male gonad","Skin","Brain",
-                                                                              "Adrenalgland_macrophage","gonad_macrophage",
-                                                                              "osteoclast","langerhans","microglia",
-                                                                              "Brain_microglia"))
-p1 = ggplot(dis.embryo.subtype2,aes(x = variable, y = value))+
-  geom_boxplot(aes(fill = subtype),color = "grey30",outlier.shape = NA)+
-  geom_jitter(shape = 21,color = "grey30",fill = NA,size = 1.5)+
-  geom_signif(comparisons = list(c("Adrenalgland","Adrenalgland_macrophage"),
-                                 c("Male gonad","osteoclast"),
-                                 c("Male gonad","gonad_macrophage"),
-                                 c("Skin","microglia"),
-                                 c("Skin","langerhans"),
-                                 c("Brain","Brain_microglia")), 
-              map_signif_level = T,step_increase =0.1,test = wilcox.test)+
-  theme_bw()+theme_classic()+
-  scale_fill_manual(values = as.character(mac.color),breaks = names(mac.color))+
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45,hjust = 1,vjust = 1))
-ggsave("E:\\fig5/diversity_score.pdf",p1,width = 5,height = 6,dpi = 300)
-
-#####
-mac1.metatable = mac12.metatable[mac12.metatable$subtype == "PraM",]
-mac1.metatable = mac1.metatable[mac1.metatable$time != "Adult",]
-mac1.metatable = mac1.metatable[mac1.metatable$tissue %in% c("Brain","Skin","Kidney","Female gonad","Lung","Adrenalgland","Male gonad","Heart"),]
-
-tmp = mac1.metatable
-#tmp$tissue = tmp$subtype
-
-tmp = tmp[,colnames(metatable)]
-
-tmp2 = metatable[metatable$tissue == "Brain" & metatable$subtype == "microglia",]
-tmp2
-tmp2$tissue = "brain_microglial"
-tmp = rbind(tmp,tmp2)
-
-tmp2 = metatable[metatable$tissue == "Skin" & metatable$subtype == "microglia",]
-tmp2
-tmp2$tissue = "skin_microglial"
-tmp = rbind(tmp,tmp2)
-
-tmp2 = metatable[metatable$tissue == "Skin" & metatable$subtype == "langerhans",]
-tmp2
-tmp2$tissue = "langerhans"
-tmp = rbind(tmp,tmp2)
-
-tmp2 = metatable[metatable$tissue == "Male gonad" & metatable$subtype == "osteoclast",]
-tmp2
-tmp2$tissue = "osteoclast"
-tmp = rbind(tmp,tmp2)
-
-tmp2 = metatable[metatable$tissue == "Male gonad" & metatable$subtype == "gonad_macrophage",]
-tmp2
-tmp2$tissue = "gonad_macrophage"
-tmp = rbind(tmp,tmp2)
-
-tmp2 = metatable[metatable$tissue == "Adrenalgland" & metatable$subtype == "Adrenalgland_macrophage",]
-tmp2
-tmp2$tissue = "Adrenalgland_macrophage"
-tmp = rbind(tmp,tmp2)
-
-mac1.metatable = tmp
-
-mac1.seurat = a[discard_gene2(rownames(a)),tmp$Well_ID]
-mac1.seurat = CreateSeuratObject(counts = mac1.seurat)
-mac1.seurat <- NormalizeData(mac1.seurat, normalization.method =  "LogNormalize")
-mac1.seurat <- FindVariableFeatures(mac1.seurat,selection.method = "vst", nfeatures = 5000)
-mac1.seurat <- ScaleData(mac1.seurat)
-mac1.seurat <- RunPCA(object = mac1.seurat, pc.genes = VariableFeatures(mac1.seurat))
-mac1.seurat <- FindNeighbors(mac1.seurat, dims = 1:30)
-mac1.seurat <- FindClusters(mac1.seurat, resolution = 0.5)
-
-tmp3 = tmp$tissue
-names(tmp3) = tmp$Well_ID
-Idents(mac1.seurat) = tmp3
-
-i = "Brain"
-final_marker = FindMarkers(mac1.seurat,ident.1 = i,ident.2 = c("Brain","Skin","Kidney","Female gonad","Lung","Adrenalgland","Male gonad","Heart"))
-final_marker$gene = rownames(final_marker)
-final_marker$sample = "discard"
-
-for (i in unique(mac1.metatable$tissue)){
-  print(i)
-  tmp = FindMarkers(mac1.seurat,ident.1 = i,ident.2 = c("Brain","Skin","Kidney","Female gonad","Lung","Adrenalgland","Male gonad","Heart"))
-  tmp$gene = rownames(tmp)
-  tmp$sample = i
-  final_marker = rbind(final_marker,tmp)
-}
-
-final_marker2 = final_marker
-final_marker= final_marker2
-final_marker = final_marker[final_marker$sample != "discard",]
-final_marker$sig = "non"
-final_marker$sig[final_marker$avg_log2FC >= 1 & final_marker$p_val_adj < 0.05] = "up"
-final_marker$sig[final_marker$avg_log2FC <= -1 & final_marker$p_val_adj < 0.05] = "down"
-
-rownames(final_marker) = NULL
-
-write.csv(final_marker,"E:\\fig5/degofspecific.csv")
-
-
-#final_marker = final_marker[-which(final_marker$gene %in% c("SOX11","TTN","NR4A1","TNNT2","JUN","ANXA1","HMGA2","NR4A2","JUNB","NR4A4",
-#                                                            "HLA-DRB1","HLA-DRB5","HLA-DMA",mhc2)),]
-#final_marker$sample[final_marker$sample == "langerhas"] = "langerhans"
-final_marker$sample = factor(final_marker$sample,levels = c("Female gonad","Male gonad","Lung","Kidney","Heart",
-                                                            "Adrenalgland","Skin","Brain",
-                                                            "Adrenalgland_macrophage",
-                                                            "gonad_macrophage","osteoclast",
-                                                            "langerhans","skin_microglial",
-                                                            "brain_microglial"))
-p1 = ggplot(final_marker)+
-  geom_jitter(aes(x = sample,y = avg_log2FC,color = sig))+
-  theme_bw()+xlab('')+
-  scale_color_manual(breaks = c("non","down","up"),values = c("grey66","blue","red"))+
-  theme(legend.position = 'none',axis.text.x = element_text(angle = 45,hjust = 1,vjust = 1))
-ggsave("E:\\fig5/deg.pdf",p1,width = 8,height = 6,dpi = 300)
-
 #####
 data = read.csv("E:\\fig5/counting_tab/ovary.csv",row.names = 1)
 colnames(data) = c("CD45+MRC1+","CD45+MRC1-")
@@ -797,31 +557,223 @@ dev.off()
 
 ggsave("E:\\fig5/counting_fig/legend.pdf",p1,width = 4,height = 3,dpi = 300)
 
-#####
-use.gene = c("IL1B","CXCL8","TNF","DAB2","MRC1","VEGFA","HMGA2")
+###fig5 J
+library(metacell)
+library(stringr)
+library(foreach)
+library(pheatmap)
+library(tgconfig)
+library(ggsignif)
+library(Seurat)
 
-tmp = metatable[metatable$subtype %in% c("PraM","pre_PraM"),]
-#tmp = tmp[,c("Well_ID","subtype")]
-tmp_tab = as.data.frame(t(as.matrix(a_reduced[use.gene,])))
-tmp_tab$Well_ID = rownames(tmp_tab)
+set_param("scm_spike_regexp","^ERCC-","metacell")
+set_param("scm_mc_mark_k_per_clust",100,"metacell") #default: 5
+set_param("scm_mc_mark_min_gene_cov",0.3,"metacell") # default: 0.25
+set_param("scm_mc_mark_min_gene_fold",2,"metacell") # default: 1.5
+set_param("mc_plot_device",'pdf', "metacell")
 
-tmp_tab = merge(tmp,tmp_tab,by = "Well_ID",all.x = T)
+set_param("mcell_mc2d_K",30,"metacell") # default: 20
+set_param("mcell_mc2d_T_edge",0.02,"metacell") # default: 0.05
+set_param("mcell_mc2d_max_confu_deg",8,"metacell") # default: 5
+set_param("mcell_mc2d_edge_asym",FALSE,"metacell") # default: TRUE
+set_param("mcell_mc2d_proj_blur",0.02,"metacell") # default: 0.02
 
-tmp_tab = tmp_tab[tmp_tab$time != "Adult",]
-tmp_tab = tmp_tab[,c("subtype",use.gene)]
-tmp_tab = reshape2::melt(tmp_tab)
+dbpath<-"/home/asus/Desktop/invitro_20230308/"
+mat_id<-"invitro"  #name of the matrix (umi-tab)
 
-ggplot(tmp_tab)+
-  geom_violin(aes(x = subtype, y = log2(value+1),fill = variable),scale = "width",color = "grey30")+
-  facet_grid(variable ~ .,scales = "free")+
-  xlab("")+ylab("")+theme_bw()+
-  scale_x_discrete("")+
-  scale_y_continuous(expand = c(0, 0), labels = function(x)
-    c(rep(x = '', times = length(x) - 2), x[length(x) - 1], '')) +
-  theme(strip.background = element_rect(color = "black", fill = "white"),
-        panel.spacing = unit(x = 0, units = 'lines'),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.x = element_text(size=12,angle = 45,vjust = 0.7,hjust=0.8,colour = "black"),
-        strip.text.y = element_text(size = 12,angle = 360, face = 'bold'),
-        legend.position = "none")
+if(!dir.exists(dbpath)) dir.create(dbpath)
+scdb_init(dbpath, force_reinit=T)
+
+mcell_import_multi_mars(mat_id,dataset_table_fn = "/home/asus/Desktop/invitro_20230308/MARS_Batches.txt",
+                        base_dir = "/home/asus/Desktop/invitro_20230308/umi_tab/",
+                        patch_cell_name = T) #loading the amp_batches, patch_cell_name, means, add the name of batch onto the well_id
+
+
+mat<-scdb_mat(mat_id) # transfer the umi-tab to variabe "mat"
+
+all_mat_seurat<-CreateSeuratObject(mat@mat,min.cells = 40, min.features = 100)
+all_mat_seurat[["percentage.mt"]]=PercentageFeatureSet(all_mat_seurat,pattern="MT-")
+
+all_mat_seurat@meta.data$orig.ident = "human_proj" # to avoid the errors of cell id
+Idents(all_mat_seurat) = "orig.ident"
+
+
+
+VlnPlot(all_mat_seurat,features = c("nCount_RNA","nFeature_RNA", "percentage.mt"))
+
+
+####
+fgpath<-"/home/asus/Desktop/invitro_20230308/"
+
+if(!dir.exists(fgpath)) dir.create(fgpath)
+scfigs_init(fgpath)
+
+mcell_plot_umis_per_cell(mat_id)
+
+####
+
+
+all_mat_seurat <- subset(all_mat_seurat, nCount_RNA > 200 & nCount_RNA < 10000 & percentage.mt< 50) # filter
+
+
+
+setwd("/home/asus/Desktop/invitro_20230308/file3/")
+library(Matrix)
+write.table(data.frame(rownames(all_mat_seurat@assays$RNA@counts),rownames(all_mat_seurat@assays$RNA@counts)),file = 'genes.tsv',
+            quote = F,sep = '\t',
+            col.names = F,row.names = F)
+write.table(colnames(all_mat_seurat@assays$RNA@counts),file = 'barcodes.tsv',quote = F,
+            col.names = F,row.names = F)
+
+counts <- as(all_mat_seurat@assays$RNA@counts, "sparseMatrix")
+writeMM(counts, file = "matrix.mtx") 
+
+####-----------------------------------------------------------
+
+data<-Read10X("~/Desktop/invitro_20230308/file3/")
+
+
+## construct Seurat object
+seob_data <- CreateSeuratObject(counts = data)
+seob_data <- NormalizeData(seob_data, normalization.method =  "LogNormalize")
+
+
+seob_data <- FindVariableFeatures(seob_data, 
+                                  selection.method = "vst", 
+                                  nfeatures = 2000) 
+
+
+seob_data <- ScaleData(seob_data, features = rownames(seob_data))
+
+seob_data <- RunPCA(seob_data)
+ElbowPlot(seob_data, ndims = 50)
+## UMAP
+seob_data <- RunUMAP(seob_data, dims = 1:30)
+
+
+seob_data <- FindNeighbors(seob_data,
+                           dims = 1:30)
+seob_data <- FindClusters(seob_data,
+                          resolution = 0.3, # 值越大，cluster 越多
+                          random.seed = 1) 
+
+umap.coor<-as.data.frame(seob_data@reductions$umap@cell.embeddings)
+umap.coor$Well_ID<-rownames(umap.coor)
+
+#meta<-read.csv("~/Desktop/invitro_20230308/wells_cells.csv",header=T)
+meta<-read.csv("~/Desktop/invitro_20230308/wells_cells2.csv",header=T)
+meta<-merge(umap.coor,meta.orig,by="Well_ID")
+
+
+pram.score<-read.csv("~/Desktop/invitro_20230308/proangiogenic_score.csv")
+
+#pram.score.matrix<-data[rownames(data)%in%pram.score$Proangiogenic.module,]
+mat2<-mat@mat
+
+pram.score.matrix.mat2<-mat2[rownames(mat2)%in%pram.score$Proangiogenic.module,]
+
+pram.score.matrix.mat2<-as.matrix(pram.score.matrix.mat2)
+
+
+col_mean_genes<-colMeans(as.matrix(pram.score.matrix.mat2[,1:ncol(pram.score.matrix.mat2)]))
+
+col_mean_genes<-as.data.frame(col_mean_genes)
+col_mean_genes$Well_ID<-rownames(col_mean_genes)
+
+meta<-merge(meta,col_mean_genes,by="Well_ID")
+
+
+###########---------------------------------pheatmap
+## 2&4 YS
+## 5&6 monocyte
+
+meta.sub<-meta[meta$seurat_clusters%in%c("1","2","5","6"),]
+
+data<-seob_data@assays$RNA@data  ## normalized data
+data<-data[rownames(data)%in%c("S100A8","S100A9","LYZ", ## monocyte module
+                               "MRC1","LYVE1","DAB2","CD163","RNASE1",## core macrophage module
+                               "CD83","VEGFA","IL1B","PLAUR","CXCL8","BTG2","ICAM1","TNF","PLAUR"# proangiogenic module
+),]
+data<-data[,colnames(data)%in%meta.sub$Well_ID]
+
+###
+YS_vEC_0h.id<-subset(meta.sub, info == "vEC" & tissue == "Yolksac" & time == "0h")
+YS_vEC_60h.id<-subset(meta.sub, info == "vEC" & tissue == "Yolksac" & time == "60h")
+monocyte_vEC_0h.id<-subset(meta.sub, info == "vEC" & tissue == "monocyte" & time == "0h")
+monocyte_vEC_60h.id<-subset(meta.sub, info == "vEC" & tissue == "monocyte" & time == "60h")
+
+YS_uvEC_0h.id<-subset(meta.sub, info == "uvEC" & tissue == "Yolksac" & time == "0h")
+YS_uvEC_60h.id<-subset(meta.sub, info == "uvEC" & tissue == "Yolksac" & time == "60h")
+monocyte_uvEC_0h.id<-subset(meta.sub, info == "uvEC" & tissue == "monocyte" & time == "0h")
+monocyte_uvEC_60h.id<-subset(meta.sub, info == "uvEC" & tissue == "monocyte" & time == "60h")
+
+
+
+YS_vEC_0h<-data[,colnames(data)%in%YS_vEC_0h.id$Well_ID]
+YS_vEC_60h<-data[,colnames(data)%in%YS_vEC_60h.id$Well_ID]
+YS_uvEC_0h<-data[,colnames(data)%in%YS_uvEC_0h.id$Well_ID]
+YS_uvEC_60h<-data[,colnames(data)%in%YS_uvEC_60h.id$Well_ID]
+
+
+monocyte_vEC_0h<-data[,colnames(data)%in%monocyte_vEC_0h.id$Well_ID]
+monocyte_vEC_60h<-data[,colnames(data)%in%monocyte_vEC_60h.id$Well_ID]
+monocyte_uvEC_0h<-data[,colnames(data)%in%monocyte_uvEC_0h.id$Well_ID]
+monocyte_uvEC_60h<-data[,colnames(data)%in%monocyte_uvEC_60h.id$Well_ID]
+
+
+calc_mean<-function(tmp){
+  
+  tmp.mean<-rowMeans(as.matrix(tmp[,1:ncol(tmp)]))
+  
+  return(tmp.mean)
+}
+
+YS_vEC_0h_mean<-calc_mean(YS_vEC_0h)
+YS_vEC_60h_mean<-calc_mean(YS_vEC_60h)
+YS_uvEC_0h_mean<-calc_mean(YS_uvEC_0h)
+YS_uvEC_60h_mean<-calc_mean(YS_uvEC_60h)
+
+monocyte_vEC_0h_mean<-calc_mean(monocyte_vEC_0h)
+monocyte_vEC_60h_mean<-calc_mean(monocyte_vEC_60h)
+monocyte_uvEC_0h_mean<-calc_mean(monocyte_uvEC_0h)
+monocyte_uvEC_60h_mean<-calc_mean(monocyte_uvEC_60h)
+
+x<-rbind(YS_vEC_0h_mean,YS_vEC_60h_mean,YS_uvEC_0h_mean,YS_uvEC_60h_mean,monocyte_vEC_0h_mean,monocyte_vEC_60h_mean,monocyte_uvEC_0h_mean,monocyte_uvEC_60h_mean)
+x<-t(x)
+
+###
+
+YS_vEC_0h_pram<-calc_pram(col_mean_genes, YS_vEC_0h)
+YS_vEC_60h_pram<-calc_pram(col_mean_genes, YS_vEC_60h)
+YS_uvEC_0h_pram<-calc_pram(col_mean_genes, YS_uvEC_0h)
+YS_uvEC_60h_pram<-calc_pram(col_mean_genes, YS_uvEC_60h)
+
+monocyte_vEC_0h_pram<-calc_pram(col_mean_genes, monocyte_vEC_0h)
+monocyte_vEC_60h_pram<-calc_pram(col_mean_genes, monocyte_vEC_60h)
+monocyte_uvEC_0h_pram<-calc_pram(col_mean_genes, monocyte_uvEC_0h)
+monocyte_uvEC_60h_pram<-calc_pram(col_mean_genes, monocyte_uvEC_60h)
+
+xx<-c(YS_vEC_0h_pram,YS_vEC_60h_pram,YS_uvEC_0h_pram,YS_uvEC_60h_pram,monocyte_vEC_0h_pram,monocyte_vEC_60h_pram,monocyte_uvEC_0h_pram,monocyte_uvEC_60h_pram)
+
+#######
+
+calc_pram<-function(col_mean_genes,tmp){
+  
+  
+  tmp2<-col_mean_genes[col_mean_genes$Well_ID%in%colnames(tmp),]
+  tmp2<-mean(tmp2$col_mean_genes)
+  return(tmp2)
+}
+
+x<-rbind(xx,x)
+
+rownames(x)[1]<-"Proangiogenic score"
+
+
+bk <- c(seq(-2,-0.1,by=0.01),seq(0,2,by=0.01))
+
+annotation_col = data.frame(condition = c("vEC","vEC","uvEC","uvEC","vEC","vEC","uvEC","uvEC"),source=c("YS","YS","YS","YS","monocyte","monocyte","monocyte","monocyte"),time=c("0h","60h","0h","60h","0h","60h","0h","60h"))
+rownames(annotation_col)<-colnames(x)
+
+pheatmap(x, cluster_rows = F, cluster_cols = F,scale = "row",annotation_col = annotation_col,
+         color = c(colorRampPalette(colors = c("#1B519C","white"))(length(bk)/2),colorRampPalette(colors = c("white","#A00021"))(length(bk)/2)),breaks = bk,cutree_rows = 3, show_colnames = F)

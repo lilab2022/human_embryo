@@ -133,6 +133,76 @@ path<-"E:\\fig5/"
 
 scalar_plot(data_prep2,A,B,A_1,B_1,genelist,A_color,B_color,path)
 
+###fig5s B
+
+#####
+
+cs_stage = c("cs11","cs12","cs13","cs14","cs18","cs19","cs21","cs23")
+`week_9-13` = c("week9","week10","week11","week12","week13")
+after_week16 = c("week16","week19","week20","week23","week27")
+
+mac12.metatable.stat = mac12.metatable
+
+mac12.metatable.stat$period <- mac12.metatable.stat$time
+mac12.metatable.stat$period[mac12.metatable.stat$period%in%cs_stage] <- "cs_stage"
+mac12.metatable.stat$period[mac12.metatable.stat$period%in%`week_9-13`] <- "week_9-13"
+mac12.metatable.stat$period[mac12.metatable.stat$period%in%after_week16] <- "after_week16"
+
+use.embryo = as.data.frame(table(mac12.metatable.stat$embryo))
+use.embryo = use.embryo$Var1[use.embryo$Freq >10]
+mac12.metatable.stat = mac12.metatable.stat[mac12.metatable.stat$embryo  %in% use.embryo,]
+mac12.metatable.stat = mac12.metatable.stat[mac12.metatable.stat$embryo != "embryo 6",]
+mac12.metatable.stat = mac12.metatable.stat[mac12.metatable.stat$embryo != "embryo 41",]
+mac12.metatable.stat = mac12.metatable.stat[mac12.metatable.stat$embryo != "embryo 4",]
+
+### filter out adult cells
+meta_fetal <- mac12.metatable.stat %>% filter(time!="Adult")
+table(meta_fetal$period)
+### compute ratio of subtypes in different time periods
+ratio <- list()
+for(i in unique(meta_fetal$embryo)){
+  print(i)
+  df <- meta_fetal %>% filter(embryo==i)
+  ratio[[i]] <- tapply(df$subtype,df$period,function(x){prop.table(table(x))}) %>% do.call(cbind,.) %>% as.data.frame()
+  ratio[[i]] <- ratio[[i]] %>% mutate(subtype=rownames(.),period=colnames(.),embryo=i)
+  colnames(ratio[[i]])[1] <- "ratio"
+}
+ratio <- do.call(rbind,ratio)
+ratio$period <- factor(ratio$period,levels = c("cs_stage","week_9-13","after_week16"))
+### draw mean horizontal line for each group; control segment length
+mean <- tapply(ratio$ratio,list(ratio$subtype,ratio$period),mean) %>% melt()
+colnames(mean) <- c("subtype","period","mean")
+mean$x_start <- as.numeric(mean$period)-0.1
+mean$x_end <- as.numeric(mean$period)+0.1
+###
+plt_Frac <- function(ratio, path){
+  for(i in unique(ratio$subtype)){
+    color <- mac.color[i]
+    if(is.na(color)){color <- "grey"}
+    ratio_sub <- ratio %>% filter(subtype==i)
+    mean <- tapply(ratio_sub$ratio,list(ratio_sub$subtype,ratio_sub$period),mean) %>% melt()
+    colnames(mean) <- c("subtype","period","mean")
+    mean$x_start <- as.numeric(mean$period)-0.1
+    mean$x_end <- as.numeric(mean$period)+0.1
+    
+    pdf(paste(path,i,"_Fraction_change",".pdf",sep=""),width =5,height = 8)
+    print(ggplot(ratio_sub,aes(x = period, y = ratio))+
+            geom_jitter(shape=21,width=0.2,colour="black",size=7, fill=color)+
+            geom_segment(data=mean,aes(x=x_start, y=mean, xend=x_end, yend=mean))+
+            xlab("")+ylab("")+
+            theme_bw()+
+            theme(panel.grid.major = element_blank(),
+                  panel.grid.minor = element_blank(),
+                  axis.text.x = element_text(size=30,angle = 45,vjust = 0.7,hjust=0.8,colour = "black"),
+                  axis.text.y = element_text(size=30,colour = "black"),
+                  title = element_text(size=30))+
+            ggtitle(paste0(i,"  ***"))+
+            stat_compare_means(aes(label = ..p.signif.., group=period),vjust=-2,size=6))
+    dev.off()
+  }
+}
+
+plt_Frac(ratio, "E:\\fig5/stat_ratio/")
 
 
 ###Fig5s C

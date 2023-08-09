@@ -1,4 +1,8 @@
 # Dynamics of human macrophage specification during prenatal development
-![image](https://github.com/lilab2022/human_embryo/assets/112673632/d0e6f828-35f3-4f01-8aaa-5d24e94bd669)
 
-A single cell RNA-seq atlas of the human developing immune system
+Code from the manuscript.
+
+Raw sequencing data have been uploaded and deposited into CNGB Sequence Archive (CNSA) of China National GeneBank DataBase (CNGBdb) with accession number CNP0003248.
+A web browser to explore the data: http://119.8.233.169.
+
+If you have any question or suggestion, please contect lilab_in_siat@163.com

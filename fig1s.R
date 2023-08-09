@@ -1,8 +1,11 @@
-###fig1s
+# Figure 1S
 
 #####
-###Fig1s A
+###Fig1S A
 #####
+
+human_development?
+
 human_development = human_development[, metatable$Cell[metatable$time != "Adult"]]
 
 process_cells_annotation(human_development)
@@ -11,323 +14,254 @@ plot_cells_annotation(human_development,type="histogram")
 plot_cells_annotation(human_development,type="boxplot")
 plot_UMIs_vs_Detected_genes(human_development)
 
+
 #####
-###Fig1s B
+###Fig1S B
 #####
-mc_umi = read.csv("E:\\singlecellaR/cleanumi.csv",row.names = 1)
-mc_umi = mc_umi[,unique(metatable$mc)]
 
-the_mat = mc_umi[discard_gene2(rownames(mc_umi)),colnames(mc_umi)]
-the_mat = CreateSeuratObject(counts = the_mat)
-the_mat <- NormalizeData(the_mat, normalization.method =  "LogNormalize")
-the_mat <- FindVariableFeatures(the_mat,selection.method = "vst", nfeatures = 2000)
-the_mat <- ScaleData(the_mat)
-the_mat <- RunPCA(object = the_mat, pc.genes = VariableFeatures(the_mat))
-the_mat <- FindNeighbors(the_mat, dims = 1:30)
-the_mat <- FindClusters(the_mat, resolution = 0.5)
-the_mat <- RunUMAP(object = the_mat, dims = 1:30, do.fast = TRUE)
 
-mc_anno = metatable[,c("mc","major")]
-mc_anno = mc_anno[!duplicated(mc_anno),]
 
-mc.id = mc_anno$major
-names(mc.id) = mc_anno$mc
-Idents(the_mat) = mc.id
-mc.marker = FindAllMarkers(the_mat)
-top20 <- mc.marker %>% group_by(cluster) %>% top_n(n =30, wt = avg_log2FC)
-write.csv(top20,"E:\\sup_tab/all.csv")
 
-top20 <- mc.marker %>% group_by(cluster) %>% top_n(n =20, wt = avg_log2FC)
-p1 = DoHeatmap(the_mat,features = top20$gene)
 
-tmp = as.data.frame(unique(metatable$mc))
-colnames(tmp) = "mc"
 
-tmp$sudomc = rownames(tmp)
-all.lfp = read.csv("E:\\all/lfp_all_clean_re.csv",row.names = 1)
-colnames(all.lfp) = tmp$mc
 
-all.lfp2 = all.lfp[unique(top20$gene),unique(metatable$mc)]
 
-col_order = c()
-for(i in levels(p1$data$Identity)){
-  col_order = c(col_order,unique(data1$mc[data1$major == i]))
+
+
+#####
+###Fig1S C
+#####
+library(ggsignif)
+library(ggplot2)
+source("~/Funcs_signif_fig2.R")
+setwd("./path")
+#load("mac_color.Rdata")
+load("~/major_color.Rdata") # loading color scheme for major lineages
+load("~/data/metatable_0929.Rdata") # loading single cell metatable 
+
+
+
+#######################################################################################
+
+metatable <- metatable %>% filter(time!="Adult")
+metatable <- metatable %>% filter(major!="erythrocyte") # remove erythrocyte
+metatable <- metatable %>% filter(embryo!="embryo 10") # embryo 10 contain 1 cell only
+table(metatable$major) %>% sort
+metatable %>% filter(subtype=="discard") %>% pull(major) %>% table 
+metatable <- metatable %>% filter(subtype!="discard") # drop discard annotation
+metatable$major <- as.factor(metatable$major)
+
+### divide all time into 3 periods
+CS_stage = c("cs11","cs12","cs13","cs14","cs18","cs19","cs21","cs23")
+`9-13 PCW` = c("week9","week10","week11","week12","week13")
+`After 16 PCW` = c("week16","week19","week20","week23","week27")
+metatable$period <- metatable$time
+metatable$period[metatable$period%in%CS_stage] <- "CS_stage"
+metatable$period[metatable$period%in%`9-13 PCW`] <- "9-13 PCW"
+metatable$period[metatable$period%in%`After 16 PCW`] <- "After 16 PCW"
+### filter out adult cells
+meta_fetal <- metatable %>% filter(time!="Adult")
+table(meta_fetal$period)
+### compute ratio of subtypes in different time periods
+ratio <- list()
+for(i in unique(meta_fetal$embryo)){
+  df <- meta_fetal %>% filter(embryo==i)
+  ratio[[i]] <- tapply(df$major,df$period,function(x){prop.table(table(x))}) %>% do.call(cbind,.) %>% as.data.frame()
+  ratio[[i]] <- ratio[[i]] %>% mutate(major=rownames(.),period=colnames(.),embryo=i)
+  colnames(ratio[[i]])[1] <- "ratio"
+}
+ratio <- do.call(rbind,ratio)
+ratio$period <- factor(ratio$period,levels = c("CS_stage","9-13 PCW","After 16 PCW"))
+### draw median horizontal line for each group; control segment length
+median <- tapply(ratio$ratio,list(ratio$major,ratio$period),median) %>% melt()
+colnames(median) <- c("major","period","median")
+median$x_start <- as.numeric(median$period)-0.3
+median$x_end <- as.numeric(median$period)+0.3
+my_comp <- list(c("CS_stage","9-13 PCW"),c("9-13 PCW","After 16 PCW"),c("CS_stage","After 16 PCW"))
+color_grp <- c("#A6A8A9FF","#484A4BFF","#141414FF")
+names(color_grp) <- sort(unique(ratio$period))
+
+
+
+
+#######################################################################################
+
+### Fig1S C major cell type proportion significance test in each tissue
+### drop small sample of embryo-tissue  pair (e.g., embryo14-adrenalgland 1 cell)
+tissue_less <- tapply(meta_fetal$tissue,meta_fetal$embryo, function(x){data.frame(table(x))})
+for(i in 1:length(tissue_less)){
+  tissue_less[[i]] <- tissue_less[[i]] %>% mutate(embryo=names(tissue_less)[i])
+  colnames(tissue_less[[i]])[1] <- "tissue"
+  tissue_less[[i]] <- tissue_less[[i]][,c("tissue","embryo","Freq")]
+}
+tissue_less <- do.call(rbind,tissue_less)
+tissue_less <- tissue_less %>% filter(Freq<50)
+### some tissue only exist in cs stage, separate and divide them into 3 groups
+Ftissue <- meta_fetal[,c("embryo","tissue","time","period")]
+Ftissue <- Ftissue[!duplicated(Ftissue),]
+
+tissue_early <- c("AGM","Embryo","Head","Limb","Primitive_gut","female_gonad")
+Ftissue_early <- Ftissue %>% filter(tissue%in%tissue_early)
+tapply(Ftissue_early$time,Ftissue_early$tissue,table)
+meta_fetal_more <- meta_fetal %>% filter(!tissue%in%tissue_early)
+
+### compute ratio for each embryo, each tissue
+ratio_tissue_more <- Frac_tissue(meta_fetal_more)
+
+### check embryo number for each period
+r_info <- lapply(ratio_tissue_more,function(x){tapply(x$embryo,x$period,function(x){length(unique(x))})})
+tissue_auto <- lapply(r_info,function(x)(which(length(which(x>=3))==3))) %>% unlist() %>% names()
+tissue_manual <- names(r_info) %>% setdiff(tissue_auto) %>% setdiff("Female gonad")
+
+lapply(ratio_tissue_more[tissue_manual],function(x){tapply(x$embryo,x$time,function(x){length(unique(x))})}) 
+
+#######################################################################################
+# tissue with adequate samples for dividing into CS; 9-13 PCW; After 16 PCW
+ratio_tissue_auto <- ratio_tissue_more[tissue_auto]
+
+test_tissue_auto <- list()
+for(j in names(ratio_tissue_auto)){
+  test_all <- data.frame()
+  for(i in unique(ratio_tissue_auto[[j]]$major)){
+    ratio_sub <- ratio_tissue_auto[[j]] %>% filter(major==i)
+    ratio_12 <- ratio_sub %>% filter(period%in%c("CS_stage", "9-13 PCW"))
+    ratio_23 <- ratio_sub %>% filter(period%in%c("9-13 PCW", "After 16 PCW"))
+    ratio_13 <- ratio_sub %>% filter(period%in%c("CS_stage", "After 16 PCW"))
+    
+    p.val = c(wilcox.test(ratio~period,data=ratio_12)$p.value,wilcox.test(ratio~period,data=ratio_23)$p.value,
+              wilcox.test(ratio~period,data=ratio_13)$p.value)
+    test <- data.frame(major=i,p.val_1=p.val[1],p.val_2=p.val[2],p.val_3=p.val[3])
+    test_all <- rbind(test_all,test)
+  }
+  test_tissue_auto[[j]] <- test_all %>% mutate(tissue=j)
+}
+test_tissue_auto <- do.call(rbind,test_tissue_auto) 
+test_tissue_auto <- test_tissue_auto %>% filter(p.val_1<0.05|p.val_2<0.05|p.val_3<0.05)
+
+plt_Frac_tissue_signif(ratio_tissue_auto, test_tissue_auto,"./signif/")
+
+#######################################################################################
+# tissue with inadequate samples for dividing into CS; 9-13 PCW; After 16 PCW
+# divide time period group for each tissue respectively
+
+ratio_tissue_manual <- ratio_tissue_more[tissue_manual]
+for(i in names(ratio_tissue_manual)){
+  ratio_tissue_manual[[i]]$period <- as.character(ratio_tissue_manual[[i]]$period)
 }
 
-tmp = metatable[,c("mc","major")]
-tmp = tmp[!duplicated(tmp),]
+### Spinalmarrow
+ratio_tissue_manual$Spinalmarrow[ratio_tissue_manual$Spinalmarrow$time%in%c("cs19","cs21","cs23"),"period"] <- "CS_stage"
+ratio_tissue_manual$Spinalmarrow[ratio_tissue_manual$Spinalmarrow$time%in%c("week9","week10","week11"),"period"] <- "9-11 PCW"
+ratio_tissue_manual$Spinalmarrow[ratio_tissue_manual$Spinalmarrow$time%in%c("week12","week13","week16"),"period"] <- "12-16 PCW"
+ratio_tissue_manual$Spinalmarrow$period <- factor(ratio_tissue_manual$Spinalmarrow$period,levels = c("CS_stage","9-11 PCW","12-16 PCW"))
 
-ann_col.major = as.data.frame(tmp$major)
-colnames(ann_col.major) = "major"
-rownames(ann_col.major) = tmp$mc
-p2 = pheatmap::pheatmap(all.lfp2[rev(levels(p1$data$Feature)),col_order],breaks = bk,
-                        show_colnames = F,cluster_cols = F,border_color = "grey30",
-                        cluster_rows = F,show_rownames = F,
-                        annotation_col = ann_col.major,annotation_colors = list(major = major_color),
-                        color = colorRampPalette(c("blue","white", "red"))(length(bk)))
-ggsave("E:\\fig1/hc_all_mc.pdf",p2,width = 4,height = 4)
+### Bonemarrow
+ratio_tissue_manual$Bonemarrow[ratio_tissue_manual$Bonemarrow$time%in%c("week9","cs23"),"period"] <- "CS23 - 9 PCW"
+ratio_tissue_manual$Bonemarrow[ratio_tissue_manual$Bonemarrow$time%in%c("week10","week11","week12"),"period"] <- "10-12 PCW"
+ratio_tissue_manual$Bonemarrow[ratio_tissue_manual$Bonemarrow$time%in%c("week13","week16","week23"),"period"] <- "13-23 PCW"
+ratio_tissue_manual$Bonemarrow$period <- factor(ratio_tissue_manual$Bonemarrow$period,levels = c("CS23 - 9 PCW","10-12 PCW","13-23 PCW"))
 
-#####
-### Fig1s C D E F & G
-#####
-mc.anno = metatable[,c("mc","subtype","major")]
-mc.anno = mc.anno[!duplicated(mc.anno),]
+### `Male gonad`
+ratio_tissue_manual$`Male gonad`[ratio_tissue_manual$`Male gonad`$time%in%c("cs21"),"period"] <- "CS21"
+ratio_tissue_manual$`Male gonad`[ratio_tissue_manual$`Male gonad`$time%in%c("week9","week10","week11"),"period"] <- "9-11 PCW"
+ratio_tissue_manual$`Male gonad`[ratio_tissue_manual$`Male gonad`$time%in%c("week12","week13","week16"),"period"] <- "12-16 PCW"
+ratio_tissue_manual$`Male gonad`$period <- factor(ratio_tissue_manual$`Male gonad`$period,levels = c("CS21","9-11 PCW","12-16 PCW"))
 
-####mono_dc
-monodc_mc.umi = mc_umi[discard_gene2(rownames(mc_umi)),mc.anno$mc[mc.anno$major %in% c("monocyte","DC")]]
-monodc_mc.umi = CreateSeuratObject(counts = monodc_mc.umi)
-monodc_mc.umi <- NormalizeData(monodc_mc.umi, normalization.method =  "LogNormalize")
-monodc_mc.umi <- FindVariableFeatures(monodc_mc.umi,selection.method = "vst", nfeatures = 2000)
-monodc_mc.umi <- ScaleData(monodc_mc.umi)
-monodc_mc.umi <- RunPCA(object = monodc_mc.umi, pc.genes = VariableFeatures(monodc_mc.umi))
-monodc_mc.umi <- FindNeighbors(monodc_mc.umi, dims = 1:30)
-monodc_mc.umi <- FindClusters(monodc_mc.umi, resolution = 0.5)
-monodc_mc.umi <- RunUMAP(object = monodc_mc.umi, dims = 1:30, do.fast = TRUE)
+### Thymus
+ratio_tissue_manual$Thymus[ratio_tissue_manual$Thymus$time%in%c("cs21","cs23","week9"),"period"] <- "CS21-week9"
+ratio_tissue_manual$Thymus[ratio_tissue_manual$Thymus$time%in%c("week10","week11"),"period"] <- "10-11 PCW"
+ratio_tissue_manual$Thymus[ratio_tissue_manual$Thymus$time%in%c("week12","week13","week16"),"period"] <- "12-16 PCW"
+ratio_tissue_manual$Thymus$period <- factor(ratio_tissue_manual$Thymus$period,levels = c("CS21-week9","10-11 PCW","12-16 PCW"))
 
-monodc_mc.anno = mc.anno[mc.anno$major %in% c("monocyte","DC"),]
-monodc_mc.ident = monodc_mc.anno$subtype
-names(monodc_mc.ident) = monodc_mc.anno$mc
+### Spleen
+ratio_tissue_manual$Spleen[ratio_tissue_manual$Spleen$time%in%c("week9","week10","week11"),"period"] <- "9-11 PCW"
+ratio_tissue_manual$Spleen[ratio_tissue_manual$Spleen$time%in%c("week12","week13"),"period"] <- "12-13 PCW"
+ratio_tissue_manual$Spleen[ratio_tissue_manual$Spleen$time%in%c("week16","week20","week23"),"period"] <- "16-23 PCW"
+ratio_tissue_manual$Spleen$period <- factor(ratio_tissue_manual$Spleen$period,levels = c("9-11 PCW","12-13 PCW","16-23 PCW"))
 
-Idents(monodc_mc.umi) = monodc_mc.ident
-Idents(monodc_mc.umi) = factor(Idents(monodc_mc.umi),levels = c("CD163+CD14+ DC","cycling DC","cDC1","cDC2","mDC","pDC",
-                                                                "monocyte","cycling monocyte","non-classical monocyte"))
+### Yolksac
+ratio_tissue_manual$Yolksac[ratio_tissue_manual$Yolksac$time%in%c("cs11","cs12"),"period"] <- "CS11-12"
+ratio_tissue_manual$Yolksac[ratio_tissue_manual$Yolksac$time%in%c("cs13"),"period"] <- "CS13"
+ratio_tissue_manual$Yolksac[ratio_tissue_manual$Yolksac$time%in%c("cs14","cs21"),"period"] <- "CS14-21"
+ratio_tissue_manual$Yolksac$period <- factor(ratio_tissue_manual$Yolksac$period,levels = c("CS11-12","CS13","CS14-21"))
 
-monodc_mc.markers = FindAllMarkers(monodc_mc.umi)
-top20 <- monodc_mc.markers %>% group_by(cluster) %>% top_n(n =30, wt = avg_log2FC)
+### filter tissue
+test_tissue_manual <- list()
+for(j in names(ratio_tissue_manual)){
+  test_all <- data.frame()
+  for(i in unique(ratio_tissue_manual[[j]]$major)){
+    ratio_sub <- ratio_tissue_manual[[j]] %>% filter(major==i)
+    f1 <- sort(unique(ratio_sub$period))[1]
+    f2 <- sort(unique(ratio_sub$period))[2]
+    f3 <- sort(unique(ratio_sub$period))[3]
+    ratio_12 <- ratio_sub %>% filter(period%in%c(f1, f2))
+    ratio_23 <- ratio_sub %>% filter(period%in%c(f2, f3))
+    ratio_13 <- ratio_sub %>% filter(period%in%c(f1, f3))
+    
+    p.val = c(wilcox.test(ratio~period,data=ratio_12)$p.value,wilcox.test(ratio~period,data=ratio_23)$p.value,
+              wilcox.test(ratio~period,data=ratio_13)$p.value)
+    test <- data.frame(major=i,p.val_1=p.val[1],p.val_2=p.val[2],p.val_3=p.val[3])
+    test_all <- rbind(test_all,test)
+  }
+  test_tissue_manual[[j]] <- test_all %>% mutate(tissue=j)
+}
+test_tissue_manual <- do.call(rbind,test_tissue_manual) 
+test_tissue_manual <- test_tissue_manual %>% filter(p.val_1<0.05|p.val_2<0.05|p.val_3<0.05)
 
-write.csv(top20,"E:\\sup_tab/monodc_mc_markers.csv")
+plt_Frac_tissue_signif(ratio_tissue_manual, test_tissue_manual,"./signif/")
 
-p1 = DoHeatmap(monodc_mc.umi,top20$gene)
+#######################################################################################
+# tissue with few samples for dividing into CS; 9-13 PCW; After 16 PCW
+# divide time period group for each tissue respectively
 
-mcs = as.data.frame(levels(p1$data$Cell))
-rownames(mcs) = mcs$`levels(p1$data$Cell)`
-mcs = mcs$`levels(p1$data$Cell)`[mcs$`levels(p1$data$Cell)` %in% monodc_mc.anno$mc]
+meta_fetal_less <- meta_fetal %>% filter(tissue%in%tissue_early) %>% filter(tissue!="Embryo")
+ratio_tissue_less <- Frac_tissue(meta_fetal_less)
 
-rownames(monodc_mc.anno) = monodc_mc.anno[,1]
-monodc_mc.anno = monodc_mc.anno[,-1]
+for(i in names(ratio_tissue_less)){
+  ratio_tissue_less[[i]]$period <- as.character(ratio_tissue_less[[i]]$period)
+}
 
-p2 = pheatmap::pheatmap(monodc.lfp[rev(levels(p1$data$Feature)),mcs],
-                        cluster_rows = F,cluster_cols = F,
-                        breaks = bk,
-                        annotation_col = monodc_mc.anno,
-                        annotation_colors = list(major = major_color,subtype = mono_dc.color),
-                        show_rownames = F,show_colnames = F,legend = F,annotation_legend = F,
-                        color = colorRampPalette(c("navy","white", "firebrick3"))(length(bk)))
-ggsave("E:\\fig1/monodc_marker.pdf",p2,width = 6,height = 4,dpi = 300)
+### AGM
+ratio_tissue_less$AGM[ratio_tissue_less$AGM$time%in%c("cs13"),"period"] <- "CS13"
+ratio_tissue_less$AGM[ratio_tissue_less$AGM$time%in%c("cs14","cs18"),"period"] <- "CS14-18"
+ratio_tissue_less$AGM$period <- factor(ratio_tissue_less$AGM$period,levels = c("CS13","CS14-18"))
 
-####T NK ILC
-tnkilc.umi = mc_umi[discard_gene2(rownames(mc_umi)),mc.anno$mc[mc.anno$major %in% c("T","NK","ILC")]]
-tnkilc.umi = CreateSeuratObject(counts = tnkilc.umi)
-tnkilc.umi <- NormalizeData(tnkilc.umi, normalization.method =  "LogNormalize")
-tnkilc.umi <- FindVariableFeatures(tnkilc.umi,selection.method = "vst", nfeatures = 2000)
-tnkilc.umi <- ScaleData(tnkilc.umi)
-tnkilc.umi <- RunPCA(object = tnkilc.umi, pc.genes = VariableFeatures(tnkilc.umi))
-tnkilc.umi <- FindNeighbors(tnkilc.umi, dims = 1:30)
-tnkilc.umi <- FindClusters(tnkilc.umi, resolution = 0.5)
-tnkilc.umi <- RunUMAP(object = tnkilc.umi, dims = 1:30, do.fast = TRUE)
+### Head
+ratio_tissue_less$Head[ratio_tissue_less$Head$time%in%c("cs13"),"period"] <- "CS13"
+ratio_tissue_less$Head[ratio_tissue_less$Head$time%in%c("cs14"),"period"] <- "CS14"
+ratio_tissue_less$Head$period <- factor(ratio_tissue_less$Head$period,levels = c("CS13","CS14"))
 
-tnkilc_mc.anno = mc.anno[mc.anno$major %in% c("T","NK","ILC"),]
-tnkilc_mc.ident = tnkilc_mc.anno$subtype
-names(tnkilc_mc.ident) = tnkilc_mc.anno$mc
+### Limb
+ratio_tissue_less$Limb[ratio_tissue_less$Limb$time%in%c("cs18","cs19"),"period"] <- "CS18-19"
+ratio_tissue_less$Limb[ratio_tissue_less$Limb$time%in%c("cs21","cs23"),"period"] <- "CS21-23"
+ratio_tissue_less$Limb$period <- factor(ratio_tissue_less$Limb$period,levels = c("CS18-19","CS21-23"))
 
-Idents(tnkilc.umi) = tnkilc_mc.ident
-Idents(tnkilc.umi) = factor(Idents(tnkilc.umi),levels = c("naive T_S100A4+","naive T_CCR9+","naive T_S100A4-CCR9-","cytotoxic CD8","Treg","thymocyte",
-                                                          "ILC_CXCR5+","ILC_ITGAE+","ILC_proliferating",
-                                                          "NK_S100A4+S100A5+","NK_S100A4-S100A5-","NK_proliferating"))
-tnkilc.markers = FindAllMarkers(tnkilc.umi)
-top20 <- tnkilc.markers %>% group_by(cluster) %>% top_n(n =30, wt = avg_log2FC)
-write.csv(top20,"E:\\sup_tab/tnkilc_markers.csv")
-
-
-p1 = DoHeatmap(tnkilc.umi,unique(top20$gene))
-
-mcs = as.data.frame(levels(p1$data$Cell))
-rownames(mcs) = mcs$`levels(p1$data$Cell)`
-mcs = mcs$`levels(p1$data$Cell)`[mcs$`levels(p1$data$Cell)` %in% tnkilc_mc.anno$mc]
-
-rownames(tnkilc_mc.anno) = tnkilc_mc.anno[,1]
-tnkilc_mc.anno = tnkilc_mc.anno[,-1]
-tnkilc.lfp = read.csv("E:\\t/lfp_tilcnk.csv",row.names = 1)
-load("E:\\t/tilcnk_sudomc.Rdata")
-colnames(tnkilc.lfp) = tilcnk.sudomc$mc
-names(t.color)[3] = "naive T_S100A4-CCR9-"
-names(t.color)[6] = "naive T_CCR9+"
-names(t.color)[4] = "naive T_S100A4+"
-names(t.color)[11] = "ILC_ITGAE+"
-
-
-p2 = pheatmap::pheatmap(tnkilc.lfp[rev(levels(p1$data$Feature)),mcs],
-                        cluster_rows = F,cluster_cols = F,
-                        breaks = bk,
-                        annotation_col = tnkilc_mc.anno,
-                        annotation_colors = list(major = major_color,subtype = t.color),
-                        show_rownames = F,show_colnames = F,legend = F,annotation_legend =F,
-                        color = colorRampPalette(c("navy","white", "firebrick3"))(length(bk)))
-ggsave("E:\\fig1/tilc_marker.pdf",p2,width = 6,height = 4,dpi = 300)
-
-###grani mk
-
-granu_mk.umi = mc_umi[discard_gene3(rownames(mc_umi)),mc.anno$mc[mc.anno$major %in% c("granulocyte","MK")]]
-granu_mk.umi = CreateSeuratObject(counts = granu_mk.umi)
-granu_mk.umi <- NormalizeData(granu_mk.umi, normalization.method =  "LogNormalize")
-granu_mk.umi <- FindVariableFeatures(granu_mk.umi,selection.method = "vst", nfeatures = 4000)
-granu_mk.umi <- ScaleData(granu_mk.umi)
-granu_mk.umi <- RunPCA(object = granu_mk.umi, pc.genes = VariableFeatures(granu_mk.umi))
-granu_mk.umi <- FindNeighbors(granu_mk.umi, dims = 1:30)
-granu_mk.umi <- FindClusters(granu_mk.umi, resolution = 0.5)
-granu_mk.umi <- RunUMAP(object = granu_mk.umi, dims = 1:30, do.fast = TRUE)
-
-granu_mk_mc.anno = mc.anno[mc.anno$major %in% c("granulocyte","MK"),]
-granu_mk_mc.ident = granu_mk_mc.anno$subtype
-names(granu_mk_mc.ident) = granu_mk_mc.anno$mc
-
-Idents(granu_mk.umi) = granu_mk_mc.ident
-Idents(granu_mk.umi) = factor(Idents(granu_mk.umi),levels = c("granu_CXCL2+CXCL3+","granu_CXCL2-CXCL3-","mast cell",
-                                                              "eosinophil","basophil","neutrophil","MK_GATA2+FCER1A+ITGA4+",
-                                                              "MK_GP5+GP6+ITGB3+","MK_ID2-GP5-GP6-ITGA4+"))
-granu_mk.markers = FindAllMarkers(granu_mk.umi)
-top20 <- granu_mk.markers %>% group_by(cluster) %>% top_n(n =30, wt = avg_log2FC)
-write.csv(top20,"E:\\sup_tab/granu_mk_markers.csv")
+### filter tissue
+test_tissue_less <- list()
+for(j in names(ratio_tissue_less)){
+  test_all <- data.frame()
+  for(i in unique(ratio_tissue_less[[j]]$major)){
+    ratio_sub <- ratio_tissue_less[[j]] %>% filter(major==i)
+    p.val = c(wilcox.test(ratio~period,data=ratio_sub)$p.value)
+    test <- data.frame(major=i,p.val=p.val)
+    test_all <- rbind(test_all,test)
+  }
+  test_tissue_less[[j]] <- test_all %>% mutate(tissue=j)
+}
+test_tissue_less <- do.call(rbind,test_tissue_less) 
+test_tissue_less <- test_tissue_less %>% filter(p.val<0.05)
 
 
+# grey palette ------------------------------------------------------------
 
-p1 = DoHeatmap(granu_mk.umi,unique(top20$gene))
-p1
-
-mcs = as.data.frame(levels(p1$data$Cell))
-rownames(mcs) = mcs$`levels(p1$data$Cell)`
-mcs = mcs$`levels(p1$data$Cell)`[mcs$`levels(p1$data$Cell)` %in% granu_mk_mc.anno$mc]
-
-rownames(granu_mk_mc.anno) = granu_mk_mc.anno[,1]
-granu_mk_mc.anno = granu_mk_mc.anno[,-1]
-
-granu_mk.lfp = read.csv("E:\\fig1/mk_granu/lfp_mk_granu.csv",row.names = 1)
-colnames(granu_mk.lfp) = mk_granu.sudomc$mc
-
-names(granu.color)[3] = "granu_CXCL2-CXCL3-"
-
-p2 = pheatmap::pheatmap(granu_mk.lfp[rev(levels(p1$data$Feature)),mcs],
-                        cluster_rows = F,cluster_cols = F,
-                        breaks = bk,
-                        annotation_col = granu_mk_mc.anno,
-                        annotation_colors = list(major = major_color,subtype = c(mk.color,granu.color,eos)),
-                        show_rownames = F,show_colnames = F,legend = F,annotation_legend =F,
-                        color = colorRampPalette(c("navy","white", "firebrick3"))(length(bk)))
-ggsave("E:\\fig1/granu_mk_marker.pdf",p2,width = 6,height = 4,dpi = 300)
-
-###prog B
-
-prog_b.umi = mc_umi[discard_gene2(rownames(mc_umi)),mc.anno$mc[mc.anno$major %in% c("B","progenitor")]]
-prog_b.umi = CreateSeuratObject(counts = prog_b.umi)
-prog_b.umi <- NormalizeData(prog_b.umi, normalization.method =  "LogNormalize")
-prog_b.umi <- FindVariableFeatures(prog_b.umi,selection.method = "vst", nfeatures = 4000)
-prog_b.umi <- ScaleData(prog_b.umi)
-prog_b.umi <- RunPCA(object = prog_b.umi, pc.genes = VariableFeatures(prog_b.umi))
-prog_b.umi <- FindNeighbors(prog_b.umi, dims = 1:30)
-prog_b.umi <- FindClusters(prog_b.umi, resolution = 0.5)
-prog_b.umi <- RunUMAP(object = prog_b.umi, dims = 1:30, do.fast = TRUE)
-
-prog_b_mc.anno = mc.anno[mc.anno$major %in% c("B","progenitor"),]
-prog_b_mc.ident = prog_b_mc.anno$subtype
-names(prog_b_mc.ident) = prog_b_mc.anno$mc
-
-Idents(prog_b.umi) = prog_b_mc.ident
-Idents(prog_b.umi) = factor(Idents(prog_b.umi),levels = c("HSC/MPP","MPP","Mye Prog",
-                                                          "Mk/E Prog","DC-MG Prog","Lym Prog",
-                                                          "Pro_B", "Pre_B","Immature_B","Mature_B","plasma"))
-prog_b.markers = FindAllMarkers(prog_b.umi)
-top20 <- prog_b.markers %>% group_by(cluster) %>% top_n(n =30, wt = avg_log2FC)
-write.csv(top20,"E:\\sup_tab/prog_b_markers.csv")
-
-
-
-p1 = DoHeatmap(prog_b.umi,unique(top20$gene))
-p1
-
-mcs = as.data.frame(levels(p1$data$Cell))
-rownames(mcs) = mcs$`levels(p1$data$Cell)`
-mcs = mcs$`levels(p1$data$Cell)`[mcs$`levels(p1$data$Cell)` %in% prog_b_mc.anno$mc]
-
-rownames(prog_b_mc.anno) = prog_b_mc.anno[,1]
-prog_b_mc.anno = prog_b_mc.anno[,-1]
-
-prog_b.lfp = read.csv("E:\\fig1/b_prog/lfp_bprog.csv",row.names = 1)
-colnames(prog_b.lfp) = b_prog.sudomc$mc
-
-p2 = pheatmap::pheatmap(prog_b.lfp[rev(levels(p1$data$Feature)),mcs],
-                        cluster_rows = F,cluster_cols = F,
-                        breaks = bk,
-                        annotation_col = prog_b_mc.anno,
-                        annotation_colors = list(major = major_color,subtype = c(b.color,prog.color)),
-                        show_rownames = F,show_colnames = F,legend = F,annotation_legend =F,
-                        color = colorRampPalette(c("navy","white", "firebrick3"))(length(bk)))
-ggsave("E:\\fig1/prog_b.pdf",p2,width = 6,height = 4,dpi = 300)
-
-###mac
-
-mac.umi = mc_umi[discard_gene2(rownames(mc_umi)),mc.anno$mc[mc.anno$major == "macrophage"]]
-mac.umi = CreateSeuratObject(counts = mac.umi)
-mac.umi <- NormalizeData(mac.umi, normalization.method =  "LogNormalize")
-mac.umi <- FindVariableFeatures(mac.umi,selection.method = "vst", nfeatures = 4000)
-mac.umi <- ScaleData(mac.umi)
-mac.umi <- RunPCA(object = mac.umi, pc.genes = VariableFeatures(mac.umi))
-mac.umi <- FindNeighbors(mac.umi, dims = 1:30)
-mac.umi <- FindClusters(mac.umi, resolution = 0.5)
-mac.umi <- RunUMAP(object = mac.umi, dims = 1:30, do.fast = TRUE)
-
-mac.umi.anno = mc.anno[mc.anno$major == "macrophage",]
-mac.umi.ident = mac.umi.anno$subtype
-names(mac.umi.ident) = mac.umi.anno$mc
-
-Idents(mac.umi) = mac.umi.ident
-Idents(mac.umi) = factor(Idents(mac.umi),levels = c("HdpM","YsdM_AFP_high","YsdM_AFP_low","pre_microglia",
-                                                    "red_pulp","Kupffer_cell","pre_PraM","PraM","gonad_macrophage",
-                                                    "Adrenalgland_macrophage","intestine CD209+ Mφ",
-                                                    "intestine CD207+ Mφ","langerhans","osteoclast","microglia"))
-mac.umi.markers = FindAllMarkers(mac.umi)
-top20 <- mac.umi.markers %>% group_by(cluster) %>% top_n(n =30, wt = avg_log2FC)
-write.csv(top20,"E:\\sup_tab/mac_markers.csv")
-
-
-p1 = DoHeatmap(mac.umi,top20$gene)
-p1
-
-mcs = as.data.frame(levels(p1$data$Cell))
-rownames(mcs) = mcs$`levels(p1$data$Cell)`
-mcs = mcs$`levels(p1$data$Cell)`[mcs$`levels(p1$data$Cell)` %in% mac.umi.anno$mc]
-
-rownames(mac.umi.anno) = mac.umi.anno[,1]
-mac.umi.anno = mac.umi.anno[,-1]
-mac.umi.anno2 = as.data.frame(mac.umi.anno$subtype)
-rownames(mac.umi.anno2) = rownames(mac.umi.anno)
-
-mac.lfp = read.csv("E:\\mac_new/lfp.csv",row.names = 1)
-colnames(mac.lfp) = mac.new.sudomc$mc
-write.csv(mac.lfp,"E:\\mac_new/lfp_real_mc.csv")
-bk = seq(-2,2,0.5)
-p2 = pheatmap::pheatmap(mac.lfp[rev(levels(p1$data$Feature)),mcs],
-                        cluster_rows = F,cluster_cols = F,
-                        breaks = bk,
-                        annotation_col = mac.umi.anno,
-                        annotation_colors = list(major = major_color,subtype = mac.color),
-                        show_rownames = F,show_colnames = F,
-                        legend = F,annotation_legend =F,
-                        color = colorRampPalette(c("navy","white", "firebrick3"))(length(bk)))
-ggsave("E:\\fig1/mac.pdf",p2,width = 6,height = 4,dpi = 300)
-
-pheatmap::pheatmap(mac.lfp[rev(levels(p1$data$Feature)),mcs],
-                   cluster_rows = F,cluster_cols = F,
-                   breaks = bk,
-                   annotation_col = mac.umi.anno,
-                   annotation_colors = list(major = major_color,subtype = mac.color),
-                   show_rownames = T,show_colnames = F,
-                   legend = F,annotation_legend =F,
-                   color = colorRampPalette(c("navy","white", "firebrick3"))(length(bk)))
+plt_Frac_tissue_signif_grey_l(ratio_tissue_auto, test_tissue_auto,"./grey_l/")
+plt_Frac_tissue_signif_grey_l(ratio_tissue_manual, test_tissue_manual,"./grey_l/")
 
 
 #####
-### Fig1s H
+###Fig1S D
 #####
+
 library(randomcoloR)
 embryo.color = randomColor(length(unique(sc$embryo)))
 show_col(embryo.color)
@@ -392,7 +326,7 @@ ggsave(paste0("E:\\fig1/qc/","gender_","all",".png"),p1,width = 18,height = 18,d
 
 
 #####
-### Fig1s I
+### Fig1s E
 #####
 tmp = tmp[tmp$time != "Adult",]
 for (i in unique(tmp$subtype)){
@@ -479,7 +413,7 @@ for (i in unique(tmp$tissue)){
 
 
 #####
-### Fig1s J
+### Fig1s F
 #####
 tmp2 = matrix(NA,ncol = length(unique(metatable$mc)),nrow = length(unique(metatable$embryo)))
 colnames(tmp2) = unique(metatable$mc)

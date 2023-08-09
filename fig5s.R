@@ -2,8 +2,115 @@
 #### writer： Feng Ruoqing
 #### Date：2022-10-4
 
+##fig5sA
 
+#####
+prep<-function(A,B,a_reduced,FC_cutoff,mf_new_mc){
+  
+  
+  all_cellids_A = mf_new_mc[mf_new_mc$subtype %in% A,]
+  data_A<-a_reduced[,colnames(a_reduced)%in%all_cellids_A$Well_ID]
+  
+  all_cellids_B = mf_new_mc[mf_new_mc$subtype %in% B,]
+  data_B<-a_reduced[,colnames(a_reduced)%in%all_cellids_B$Well_ID]
+  
+  
+  A_row_mean = data_calc_row_mean(data_A,A)
+  B_row_mean = data_calc_row_mean(data_B,B)
+  
+  data_prep <-merge(A_row_mean,B_row_mean,by='row.names',all=TRUE)
+  rownames(data_prep)<-data_prep$Row.names
+  data_prep<-data_prep[,-1]
+  
+  
+  data_prep<-log2(data_prep+1)
+  
+  log2FC = (data_prep[,1])-(data_prep[,2])
+  
+  data_prep_FC<-cbind(data_prep,log2FC)
+  
+  
+  
+  gene_tag<-tag(log2FC,as.numeric(FC_cutoff))
+  
+  data_prep2<-cbind(data_prep_FC,gene_tag)
+  
+  
+  return(data_prep2)
+  
+}
 
+scalar_plot<-function(data_prep2,A,B,A_1,B_1,genelist,A_color,B_color,path){
+  
+  
+  
+  data_prep2$label = ""
+  data_prep2$gene = rownames(data_prep2)
+  data_prep2$label[data_prep2$gene%in%genelist]=data_prep2$gene[data_prep2$gene%in%genelist]
+  
+  
+  
+  corr<-cor(data_prep2[,1],data_prep2[,2])
+  corr<-round(corr,digits=4)
+  
+  colnames(data_prep2)[1:2] = c(A,B)
+  p<-ggplot(data_prep2,aes(x = get(A),y = get(B),label = label))+
+    geom_point(aes(color = gene_tag), size = 1)+xlim(0,7)+ylim(0,7)+
+    geom_text_repel(data = data_prep2[data_prep2 != "",],size = 6,max.overlaps = 100)+
+    theme_bw() + 
+    
+    labs(x = A_1, y = B_1, color = '',subtitle = paste("Correlation:",corr,sep="")) + #鍧愭爣杞存爣棰樿缃?
+    
+    geom_abline(intercept = 0.585, slope = 1, col = 'black', linetype = 'dashed', size = 0.5) + #杩?3鍙ョ敤浜庢坊鍔? |log2FC|>1 鐨勯槇鍊肩嚎
+    
+    geom_abline(intercept = -0.585, slope = 1, col = 'black', linetype = 'dashed', size = 0.5) +
+    
+    geom_abline(intercept = 0, slope = 1, col = 'black', linetype = 'dashed', size = 0.8)+
+    
+    scale_color_manual(values = c(A_color, 'gray', B_color)) +theme(legend.position = 'none')+theme(text = element_text(size = 20))  
+  
+  ggsave(p,filename = paste(path,A,"_VS_",B,"_scalar_plot.png",sep=""),width = 8, height = 8, units = "in", device='png')
+  ggsave(p,filename = paste(path,A,"_VS_",B,"_scalar_plot.pdf",sep=""),width = 8, height = 8, units = "in", device='pdf')
+  
+}
+
+data_calc_row_mean<-function(data,subtype){
+  
+  data<-as.matrix(data)
+  
+  data = apply(data,1,mean)
+  
+  data = as.data.frame(data)
+  
+  colnames(data)<-subtype
+  
+  return(data)
+  
+}
+
+tag<-function(data,cutoff){
+  
+  color_tag<-vector()
+  
+  for(i in 1:length(data)){
+    
+    if(data[i]>=cutoff){
+      
+      color_tag[i]<-"up"
+      
+    }else if(data[i]< (-cutoff) ){
+      
+      color_tag[i]<-"down"
+      
+    }else {
+      color_tag[i]<-"none"
+    }
+  }
+  
+  return(color_tag)
+  
+}
+##
 
 
 ###Fig5s C

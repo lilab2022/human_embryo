@@ -2,13 +2,95 @@
 ##writer: Dr. Wang Hao
 ##Date: 2022-10-4
 
-##Figure 6C
+## Figure 6
 
-load("G://embryo/20220929/metatable_0929.Rdata")
-load("G://embryo/20220929/mac.color2.rdata")
+rm(list = ls())
+
+library(dyno)
+library(tidyverse)
+library(SummarizedExperiment)
+library(Seurat)
+library(stringr)
+library(ggrepel)
 
 
-load("G://embryo/20220804/FDG_withoutAdult.rdata")
+# Figure 6A
+
+
+load("~/Desktop/DATA/metatable_0929.Rdata")
+load("/home/asus/Desktop/embryo_20230220/final_figures/data/mac.color2.rdata")
+load("/home/asus/Desktop/embryo_20230220/embryo/20220801/20220720/major_color.Rdata")
+
+
+
+myeloid_fdg_coor<-read.csv("~/Desktop/embryo_20230220/embryo/20230109/20221224/fdg_coor.csv")
+
+colnames(myeloid_fdg_coor)<-c("well_id","FDG1","FDG2")
+
+metatable$well_id<-paste0(metatable$Well_ID,"__human_development")
+
+myeloid<-merge(myeloid_fdg_coor,metatable,by="well_id")
+
+
+
+myeloid_embryo<-myeloid[!myeloid$time=="Adult",]
+
+
+myeloid_embryo$FDG11=NA
+myeloid_embryo$FDG22=NA
+
+myeloid_embryo$FDG11=myeloid_embryo$FDG1
+myeloid_embryo$FDG22=myeloid_embryo$FDG2
+
+
+p1<-ggplot(myeloid_embryo)+
+  geom_point(aes(x = FDG1, y = FDG2),shape = 19,stroke = 0.2,size = 3,color="grey88")+
+  geom_point(data=myeloid_embryo, aes(x = FDG11, y = FDG22,fill=major),shape = 21,stroke = 0.2,size = 3)+
+  scale_fill_manual(values = as.character(major_color),breaks = names(major_color))+
+  theme_bw()+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.border = element_blank(),
+        panel.grid=element_blank()
+  )+NoLegend()
+
+
+ggsave(p1,filename = "~/Desktop/embryo_20230220/final_figures/myeloid_embryo_Nolegend.png",width = 15, height = 15, units = "in", device='png')
+ggsave(p1,filename = "~/Desktop/embryo_20230220/final_figures/myeloid_embryo_Nolegend.pdf",width = 15, height = 15, units = "in", device='pdf')
+
+
+
+p2<-ggplot(myeloid_embryo)+
+  geom_point(aes(x = FDG1, y = FDG2),shape = 19,stroke = 0.2,size = 3,color="grey88")+
+  geom_point(data=myeloid_embryo[myeloid_embryo$major=="macrophage",],aes(x = FDG11, y = FDG22,fill=subtype),shape = 21,stroke = 0.2,size = 3)+
+  scale_fill_manual(values = as.character(mac.color),breaks = names(mac.color))+
+  theme_bw()+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.border = element_blank(),
+        panel.grid=element_blank()
+  )+NoLegend()
+
+
+ggsave(p2,filename = "~/Desktop/embryo_20230220/final_figures/macrophagy_subtypes_embryo_Nolegend.png",width = 15, height = 15, units = "in", device='png')
+ggsave(p2,filename = "~/Desktop/embryo_20230220/final_figures/macrophagy_subtypes_embryo_Nolegend.pdf",width = 15, height = 15, units = "in", device='pdf')
+
+
+# Figure 6B
+
+
+
+
+
+# Figure 6C
 
 selected.subtype<-c("YsdM_AFP_low","YsdM_AFP_high","pre_PraM","PraM","HepM","microglia","monocyte","DC-MG Prog","ACY3+S100B+pMφ")
 
@@ -34,7 +116,7 @@ for(i in 1:length(time.set)) {
   
   xx<-data1[!data1$Well_ID%in%fa2.datax$Well_ID,]
   xx2<-rbind(fa2.datax,xx)
-
+  
   xx2$FDG11=NA
   xx2$FDG22=NA
   xx2$FDG11[xx2$Well_ID %in% fa2.datax$Well_ID]=xx2$FDG1[xx2$Well_ID %in% fa2.microgliax$Well_ID]
@@ -62,10 +144,7 @@ for(i in 1:length(time.set)) {
 }
 
 
-##Figure6 D
-load("G://embryo/20220801/20220720/major_color.Rdata")
-load("G://embryo/20220929/mac.color2.rdata")
-
+# Figure 6D
 
 data<-read.csv("G://embryo/20220329/cleanumi.csv",header=T,row.names = "X")
 
@@ -298,7 +377,9 @@ ggsave("G://embryo/figures/fig6/fig6_bifurcation_differentiation.png",p3,width =
 ggsave("G://embryo/figures/fig6/fig6_bifurcation_differentiation.pdf",p3,width = 6,height = 7,dpi = 300,units="in",device="pdf")
 
 
-##Figure 6 E
+# Figure 6E
+
+
 corr<-cor(meta.info2[,4],meta.info2[,6])
 corr<-round(corr,digits=4)
 
@@ -454,4 +535,3 @@ p<-ggplot(meta.info2)+
 
 ggsave(p,filename = paste("G://embryo/20220930/Slingshot_VS_Differentiation_capacity_plot.png",sep=""),width = 5, height = 5, units = "in", device='png')
 ggsave(p,filename = paste("G://embryo/20220930/Slingshot_VS_Differentiation_capacity_plot.pdf",sep=""),width = 5, height = 5, units = "in", device='pdf')
-

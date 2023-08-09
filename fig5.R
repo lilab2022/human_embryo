@@ -71,102 +71,7 @@ mc_sc3 = mac12.metatable
 mc_sc3$tissue = mc_sc3$subtype
 save(mc_sc3,file = "E:\\fig5/mc_sc3.Rdata")
 
-
-
-
-#####
-##pram vs pre-pram with new tab
-
-mc_sc3 = mac12.metatable
-mc_sc3$tissue = mc_sc3$subtype
-mc_sc3$major_type = "macrophage"
-n <- 100
-ntime <- 150
-
-pop <- 'macrophage'
-tissueA <- "pre_PraM"; cutA <- 30
-tissueB <- "PraM"; cutB <- 30
-
-get_n_cells_per_pop_per_disease(mc_sc3, n, pop, tissueA, cutA, diag =F)
-get_n_cells_per_pop_per_disease(mc_sc3, n, pop, tissueB, cutB, diag =F)
-
-ind_diff <- diff_calc(mc_sc3, a_reduced,pop, n, ntime, tissueA, tissueB, cutA, cutB)
-ind_diff_stat <- diff_stat(ind_diff, ntime)
-
-f_cut <- 1.5
-q_cut <- 0.05
-pct_cut <- 0.05
-ind_diff_stat_good <- ind_diff_stat[ind_diff_stat$pctA.mean > pct_cut | ind_diff_stat$pctB.mean > pct_cut,]
-f <- log2((ind_diff_stat_good$avgB.mean + 0.01)/(ind_diff_stat_good$avgA.mean + 0.01))
-q <- log(-(log(ind_diff_stat_good$wilcox.p.mean, 10)) + 1)
-dat <- data.frame(g = rownames(ind_diff_stat_good), f = f, q = q)
-#dat$f = -dat$f
-up <- dat[dat$f > log2(f_cut) & dat$q  > log(-log10(q_cut) + 1),]
-message('up: ', nrow(up))
-dn <- dat[dat$f < -log2(f_cut) & dat$q  > log(-log10(q_cut) + 1),]
-message('dn: ', nrow(dn))
-rownames(dat) <- rownames(ind_diff_stat_good)
-diff_genes <- rownames(dat)[abs(dat$f) > log2(f_cut) & dat$q > log(-log10(q_cut) + 1)]
-message('diff: ', length(diff_genes))
-dat$sig <- ""
-dat[diff_genes,]$sig <- diff_genes
-dat <- dat[order(dat$sig),]
-dat$group = "non"
-dat$group[dat$f > log2(f_cut) & dat$q > log(-log10(q_cut) + 1)] = "B"
-dat$group[dat$f < -log2(f_cut) & dat$q > log(-log10(q_cut) + 1)] = "A"
-
-deg = unique(dat$sig)
-deg = c("C5AR1","CXCL3","CXCL8","DAB2","PTGS2","SOD2","TNF","IL1B","HMGA2","CD36","CD83","IL1A",
-        "VEGFA","GLUL","ICAM1")
-
-dat$sig = ""
-for(i in deg){
-  dat$sig[dat$g == i] = i
-}
-
-p1 = ggplot(dat, aes(f, q, label = sig,fill = group)) +
-  geom_point( size=3,shape= 21,color = "grey66")+
-  scale_fill_manual(values=c('#2CA02CFF','#FF7F0EFF', "grey88"))+
-  geom_text_repel(data = dat[dat$sig != "",],max.overlaps = 100,size = 4) +
-  geom_vline(xintercept = log2(f_cut) , linetype="dashed", color="grey66") + 
-  geom_vline(xintercept = -log2(f_cut), linetype="dashed", color="grey66") + 
-  ylab('log((-log10 q) + 1)') + xlab('log2 f')+
-  annotate(geom="text", x=-2, y=3, label="pre_PraM",  fontface="bold",colour='#2CA02CFF', size=5)+
-  annotate(geom="text", x=2, y=3, label="PraM",  fontface="bold",colour='#FF7F0EFF', size=5)+
-  theme_bw()+theme_classic()+xlab("log2(fold change)")+ylab("q value")+
-  theme(legend.position = "none",
-        axis.text = element_text(size=14))
-ggsave("E:\\fig5/deg_volcano_newnormalize.pdf",p1,width = 5,height = 5,dpi = 300)
-
-write.csv(dat,"E:\\fig5/dat.csv")
-#####
-##volcano
-
-dat = read.csv("E:\\fig5/compare_pre_PraM_vs_PraM.csv",row.names = 1)
-deg = unique(dat$sig)
-deg = c("C5AR1","CXCL3","CXCL8","DAB2","PTGS2","SOD2","TNF","IL1B","HMGA2","CD36","CD83","IL1A",
-        "VEGFA","GLUL","ICAM1")
-
-dat$sig = ""
-for(i in deg){
-  dat$sig[dat$g == i] = i
-}
-
-p1 = ggplot(dat, aes(f, q, label = sig,fill = group)) +
-  geom_point( size=3,shape= 21,color = "grey66")+
-  scale_fill_manual(values=c('#2CA02CFF','#FF7F0EFF', "grey88"))+
-  geom_text_repel(data = dat[dat$sig != "",],max.overlaps = 100,size = 4) +
-  geom_vline(xintercept = log2(f_cut) , linetype="dashed", color="grey66") + 
-  geom_vline(xintercept = -log2(f_cut), linetype="dashed", color="grey66") + 
-  ylab('log((-log10 q) + 1)') + xlab('log2 f')+
-  annotate(geom="text", x=-1, y=3, label="pre_PraM",  fontface="bold",colour='#2CA02CFF', size=5)+
-  annotate(geom="text", x=2, y=3, label="PraM",  fontface="bold",colour='#FF7F0EFF', size=5)+
-  theme_bw()+theme_classic()+xlab("log2(fold change)")+ylab("q value")+
-  theme(legend.position = "none",
-        axis.text = element_text(size=14))
-ggsave("E:\\fig5/deg_volcano.png",p1,width = 5,height = 5,dpi = 300)
-
-#####
+##### Fig5 B
 ##2d gene exp projection
 
 use.gene = c(module$gene[module$category == "PraM"],"CD209")
@@ -239,7 +144,7 @@ p1 = ggplot(mac1_2_2d)+
 ggsave("E:\\fig5/pram_module_new_normalize_l.pdf",p1,width = 18,height = 18,dpi = 300)
 
 
-#####
+##### Fig5 H
 ##FACS marker
 target.gene = c("MRC1","P2RY12","MMP9","FCGR3A")
 
@@ -274,45 +179,9 @@ p1 = ggplot(mac1_2)+
         legend.position = "none") 
 ggsave("E:\\fig5/facs_marker_new_normalize.pdf",p1,width = 5,height = 4,dpi = 300)
 
-#####
-##pie
 
 
-i = "Male gonad"
-tmp = mac.metatable[mac.metatable$tissue == i,]
-tmp = tmp[tmp$time %in% after9,]
-
-tmp2 = as.data.frame(table(tmp$subtype))
-tmp2 = tmp2[order(tmp2$Freq,decreasing = T),]
-tmp2 = tmp2[tmp2$Freq >100,]
-tmp2$ratio = round(tmp2$Freq/sum(tmp2$Freq),2) 
-
-pdf(paste0("E:\\fig5/pie_marker/",i,"_pie.pdf"),width = 5,height = 5)
-pie(tmp2$ratio,labels = tmp2$ratio,
-    col = c(mac.color[as.character(tmp2$Var1)],
-            rep("grey88",2)),)
-#legend("topright",legend = tmp2$Var1, cex=0.8, fill=mac.color[as.character(tmp2$Var1)])
-dev.off()
-
-for (i in setdiff(unique(mac.metatable$tissue),c("AGM","Embryo","Primitive_gut","Yolksac","Male gonad",
-                                                 "Gastrointestinal tract","Thymus","Limb","Head"))) {
-  tmp = mac.metatable[mac.metatable$tissue == i,]
-  tmp = tmp[tmp$time %in% after9,]
-  
-  tmp2 = as.data.frame(table(tmp$subtype))
-  tmp2 = tmp2[order(tmp2$Freq,decreasing = T),]
-  tmp2$ratio = round(tmp2$Freq/sum(tmp2$Freq),2) 
-  
-  pdf(paste0("E:\\fig5/pie_marker/",i,"_pie.pdf"))
-  pie(tmp2$ratio,labels = tmp2$ratio[1:3],
-      col = c(mac.color[as.character(tmp2$Var1[1:3])],
-              rep("grey88",(nrow(tmp2)-3))),)
-  #legend("topright",legend = tmp2$Var1[1:3], cex=0.8, fill=mac.color[as.character(tmp2$Var1[1:3])])
-  dev.off()
-  
-}
-
-###BAR CHART
+###BAR CHART Fig5 G
 
 i = "Male gonad"
 tmp = mac.metatable[mac.metatable$tissue == i,]
@@ -369,173 +238,10 @@ p1 = ggplot(tissue_ratio)+
         axis.ticks=element_line())+
   scale_fill_manual(values = c(as.character(mac.color),"grey66"),breaks = c(names(mac.color),"other"))
 ggsave("E:\\fig5/pram_prepram_ratio.pdf",p1,width = 5,height = 4,dpi = 300)
-#####
-figre5_mac_sub_ratio_per_tissue = function(the_metatable,the_dir,thew , theh){
-  tmp = the_metatable
-  
-  tmp= tmp[-which(tmp$time == "Adult"),]
-  
-  tmp2 = tmp
-  
-  for(i in unique(tmp2$tissue)){
-    tmp = tmp2[,c("tissue","time","subtype")]
-    tmp = tmp[tmp$tissue == i,]
-    tmp = tmp[,c("time","subtype")]
-    tmp$new = paste(tmp$time,tmp$subtype,sep = "_")
-    tmp3 = as.data.frame(table(tmp$new))
-    #tmp3 = tmp3[tmp3$Freq >= 20,]
-    if(nrow(tmp3)>0){
-      tmp = tmp[tmp$new %in% tmp3$Var1,]
-      tmp = tmp[,c("time","subtype")]
-      tmp$count = 0
-      for (a in unique(tmp$time)) {
-        
-        tmp$count[tmp$time == a ] = nrow(tmp[tmp$time == a,])
-        
-      }
-      other = setdiff(time_order,c(unique(tmp$time),"Adult"))
-      other = as.data.frame(other)
-      other$blank = "blank"
-      other$count = 0
-      colnames(other) = colnames(tmp)
-      tmp = rbind(tmp,other)
-      tmp$time <- factor(tmp$time,levels=time_order,ordered = TRUE)
-      p2 = ggplot(tmp)+
-        geom_bar(aes(x= time,fill = subtype),stat="count",position = "fill",width = 0.9,color = "black")+
-        geom_text(data = tmp[!duplicated(tmp),],aes(x = time,y = 0.95,label = count))+
-        xlab("")+ylab("")+
-        ggtitle(paste(i," total cell number ",nrow(tmp),sep = ""))+
-        scale_fill_manual(values = c(as.character(mac.color),"white"),breaks = c(names(mac.color),"blank"))+
-        scale_y_continuous(expand=c(0,0))+
-        theme(axis.text.x = element_text(angle = 45,hjust = 1,vjust = 1),
-              axis.text = element_text(size = 12),
-              axis.title=element_blank(),
-              legend.title=element_blank(),
-              panel.background=element_blank(),
-              axis.line=element_line(),
-              axis.ticks=element_line(),
-              legend.position = "none")
-      ggsave(paste(the_dir,i,"_tissue.pdf",sep = ""),p2,width = thew,height = theh,dpi = 300)
-    }
-  }
-}
-figre5_mac_sub_ratio_per_tissue(the_metatable = mac12.metatable,
-                                the_dir = "E:\\fig5/pertissue3/",thew = 8,theh = 5)
 
-#####
-figre5_mac_ratio = function(the_metatable,the_path,thew , theh){
-  the_metatable$new = paste0(the_metatable$tissue,the_metatable$subtype)
-  for (new in unique(the_metatable$new)) {
-    if (nrow(the_metatable[the_metatable$new == new,])<10){
-      the_metatable= the_metatable[-which(the_metatable$new == new),]
-    }
-  }
-  
-  the_metatable = the_metatable[,c("time","subtype","Well_ID","tissue")]
-  the_metatable = the_metatable[-which(the_metatable$time == "Adult"),]
-  the_metatable = the_metatable[-which(the_metatable$time == "week19"),]
-  the_metatable$time <- factor(the_metatable$time,levels=time_order,ordered = TRUE)
-  
-  tmp2 = the_metatable[,c("time","subtype")]
-  
-  tmp2 = tmp2[!duplicated(tmp2),]
-  rownames(tmp2) = NULL
-  tmp2$rate = 0
-  for(t in rownames(tmp2)){
-    tmp2[t,"rate"] = nrow(the_metatable[the_metatable$time == tmp2[t,"time"] & the_metatable$subtype == tmp2[t,"subtype"],])/nrow(the_metatable[the_metatable$time == tmp2[t,"time"],])
-  }
-  
-  the_p1 = ggplot(tmp2,aes(x = time, 
-                           stratum = subtype, 
-                           alluvium = subtype,
-                           y = rate,
-                           fill = subtype,
-                           label = subtype)) +
-    scale_y_continuous(label = scales::percent_format(),
-                       expand=c(0,0)) +
-    scale_fill_manual(values = as.character(mac.color),breaks = names(mac.color)) +
-    geom_flow() +
-    geom_stratum(width = 0.6,colour = "grey30") +
-    theme(axis.title=element_blank(),
-          axis.text.x.bottom = element_text(angle = 45,hjust = 1,vjust = 1),
-          legend.title=element_blank(),
-          panel.background=element_blank(),
-          axis.line=element_line(),
-          axis.ticks=element_line(),
-          axis.text = element_text(size = 12),
-          legend.position = "none")
-  ggsave(the_path,the_p1,width =thew,height =theh,dpi = 300)
-}
-figre5_mac_ratio(the_metatable = mac12.metatable,the_path = "E:\\fig5/mac12_dynamic.pdf",thew = 8,theh = 5)
 
-#####
 
-cs_stage = c("cs11","cs12","cs13","cs14","cs18","cs19","cs21","cs23")
-`week_9-13` = c("week9","week10","week11","week12","week13")
-after_week16 = c("week16","week19","week20","week23","week27")
 
-mac12.metatable.stat = mac12.metatable
-
-mac12.metatable.stat$period <- mac12.metatable.stat$time
-mac12.metatable.stat$period[mac12.metatable.stat$period%in%cs_stage] <- "cs_stage"
-mac12.metatable.stat$period[mac12.metatable.stat$period%in%`week_9-13`] <- "week_9-13"
-mac12.metatable.stat$period[mac12.metatable.stat$period%in%after_week16] <- "after_week16"
-
-use.embryo = as.data.frame(table(mac12.metatable.stat$embryo))
-use.embryo = use.embryo$Var1[use.embryo$Freq >10]
-mac12.metatable.stat = mac12.metatable.stat[mac12.metatable.stat$embryo  %in% use.embryo,]
-mac12.metatable.stat = mac12.metatable.stat[mac12.metatable.stat$embryo != "embryo 6",]
-mac12.metatable.stat = mac12.metatable.stat[mac12.metatable.stat$embryo != "embryo 41",]
-mac12.metatable.stat = mac12.metatable.stat[mac12.metatable.stat$embryo != "embryo 4",]
-
-### filter out adult cells
-meta_fetal <- mac12.metatable.stat %>% filter(time!="Adult")
-table(meta_fetal$period)
-### compute ratio of subtypes in different time periods
-ratio <- list()
-for(i in unique(meta_fetal$embryo)){
-  print(i)
-  df <- meta_fetal %>% filter(embryo==i)
-  ratio[[i]] <- tapply(df$subtype,df$period,function(x){prop.table(table(x))}) %>% do.call(cbind,.) %>% as.data.frame()
-  ratio[[i]] <- ratio[[i]] %>% mutate(subtype=rownames(.),period=colnames(.),embryo=i)
-  colnames(ratio[[i]])[1] <- "ratio"
-}
-ratio <- do.call(rbind,ratio)
-ratio$period <- factor(ratio$period,levels = c("cs_stage","week_9-13","after_week16"))
-### draw mean horizontal line for each group; control segment length
-mean <- tapply(ratio$ratio,list(ratio$subtype,ratio$period),mean) %>% melt()
-colnames(mean) <- c("subtype","period","mean")
-mean$x_start <- as.numeric(mean$period)-0.1
-mean$x_end <- as.numeric(mean$period)+0.1
-###
-plt_Frac <- function(ratio, path){
-  for(i in unique(ratio$subtype)){
-    color <- mac.color[i]
-    if(is.na(color)){color <- "grey"}
-    ratio_sub <- ratio %>% filter(subtype==i)
-    mean <- tapply(ratio_sub$ratio,list(ratio_sub$subtype,ratio_sub$period),mean) %>% melt()
-    colnames(mean) <- c("subtype","period","mean")
-    mean$x_start <- as.numeric(mean$period)-0.1
-    mean$x_end <- as.numeric(mean$period)+0.1
-    
-    pdf(paste(path,i,"_Fraction_change",".pdf",sep=""),width =5,height = 8)
-    print(ggplot(ratio_sub,aes(x = period, y = ratio))+
-            geom_jitter(shape=21,width=0.2,colour="black",size=7, fill=color)+
-            geom_segment(data=mean,aes(x=x_start, y=mean, xend=x_end, yend=mean))+
-            xlab("")+ylab("")+
-            theme_bw()+
-            theme(panel.grid.major = element_blank(),
-                  panel.grid.minor = element_blank(),
-                  axis.text.x = element_text(size=30,angle = 45,vjust = 0.7,hjust=0.8,colour = "black"),
-                  axis.text.y = element_text(size=30,colour = "black"),
-                  title = element_text(size=30))+
-            ggtitle(paste0(i,"  ***"))+
-            stat_compare_means(aes(label = ..p.signif.., group=period),vjust=-2,size=6))
-    dev.off()
-  }
-}
-
-plt_Frac(ratio, "E:\\fig5/stat_ratio/")
 
 
 meta_mf <- metatable %>% filter(time!="Adult") %>% filter(major=="macrophage")

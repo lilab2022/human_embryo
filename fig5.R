@@ -73,27 +73,6 @@ save(mc_sc3,file = "E:\\fig5/mc_sc3.Rdata")
 
 
 
-load("E:\\fig5/mormalized_umitab/a_reduced.rdata")
-#load("E:\\fig5/mormalized_umitab/mf_new_mc.rdata")
-A<-"PraM"
-B<-"pre_PraM"
-
-A_color<-'#2CA02CFF'
-B_color<-'#FF7F0EFF'
-
-FC_cutoff<-"0.585"
-genelist<-unique(c("CD83","IL1B","SOD2","PTGS2","VEGFA","ICAM1","BTG1","C5AR1","DAB2",
-            c("C5AR1","CXCL3","CXCL8","DAB2","PTGS2","SOD2","TNF","IL1B","HMGA2","CD36","CD83","IL1A",
-              "VEGFA","GLUL","ICAM1")))
-
-data_prep2<-prep(A,B,a_reduced,FC_cutoff,mf_new_mc)
-
-A_1<-"PraM"
-B_1<-"pre_PraM"
-
-path<-"E:\\fig5/"
-
-scalar_plot(data_prep2,A,B,A_1,B_1,genelist,A_color,B_color,path)
 
 #####
 ##pram vs pre-pram with new tab
